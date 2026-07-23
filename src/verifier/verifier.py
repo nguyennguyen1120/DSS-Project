@@ -32,6 +32,11 @@ import json
 import os
 import sys
 import time
+
+# Fix encoding cho Windows terminal
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -375,58 +380,68 @@ BLOOM_PROMPTS = {
 }
 
 
-def check_bloom_fidelity(item: MCQItem, client) -> Check:
+def check_bloom_fidelity(item: MCQItem, client,
+                         bloom_clf=None) -> Check:
     """
-    Dùng GPT-4o-mini phân loại mức Bloom của câu hỏi sinh ra.
+    Phân loại mức Bloom của câu hỏi sinh ra.
+    Ưu tiên: dùng classifier từ VNHSGE (offline, miễn phí).
+    Fallback: GPT-4o-mini zero-shot nếu không có classifier.
     So với bloom_requested trong request.
     """
     requested = item.request.bloom_requested.value
-    q = item.question
+    LEVELS    = ["nhan_biet", "thong_hieu", "van_dung", "van_dung_cao"]
 
-    opts_text = "\n".join(
-        f"- {o.label}. {o.text}" for o in item.options)
-
-    prompt = (
-        f"Classify the Bloom's taxonomy level of this multiple-choice question.\n\n"
-        f"Question: {q}\n"
-        f"Options:\n{opts_text}\n\n"
-        f"Choose exactly one:\n"
-        f"- nhan_biet ({BLOOM_PROMPTS['nhan_biet']})\n"
-        f"- thong_hieu ({BLOOM_PROMPTS['thong_hieu']})\n"
-        f"- van_dung ({BLOOM_PROMPTS['van_dung']})\n"
-        f"- van_dung_cao ({BLOOM_PROMPTS['van_dung_cao']})\n\n"
-        f"Output exactly one of: nhan_biet, thong_hieu, van_dung, van_dung_cao"
-    )
-
-    predicted = "nhan_biet"
-    for attempt in range(2):
+    # ── Classifier từ VNHSGE (ưu tiên) ──────────────────────────────────────
+    if bloom_clf is not None:
         try:
-            resp = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
-                max_tokens=10,
-            )
-            raw = resp.choices[0].message.content.strip().lower()
-            valid = ["nhan_biet", "thong_hieu", "van_dung", "van_dung_cao"]
-            predicted = raw if raw in valid else "nhan_biet"
-            break
-        except Exception:
-            if attempt == 0: time.sleep(1)
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1]
+                                   / "preprocess"))
+            from train_bloom_classifier import predict_bloom
+            predicted = predict_bloom(bloom_clf, item.question)
+            source    = "VNHSGE_classifier"
+        except Exception as e:
+            predicted = "nhan_biet"
+            source    = f"clf_error:{e}"
+    else:
+        # ── Fallback: GPT-4o-mini zero-shot ──────────────────────────────────
+        BLOOM_PROMPTS = {
+            "nhan_biet":   "recall or recognition of facts directly stated in text",
+            "thong_hieu":  "comprehension or interpretation beyond literal text",
+            "van_dung":    "application of knowledge to new situations",
+            "van_dung_cao":"analysis, evaluation or synthesis of information",
+        }
+        opts_text = "\n".join(f"- {o.label}. {o.text}" for o in item.options)
+        prompt = (
+            f"Classify the Bloom's taxonomy level of this multiple-choice question.\n\n"
+            f"Question: {item.question}\nOptions:\n{opts_text}\n\n"
+            f"Output exactly one of: nhan_biet, thong_hieu, van_dung, van_dung_cao"
+        )
+        predicted = "nhan_biet"
+        source    = "gpt_zeroshot"
+        if client is not None:
+            for attempt in range(2):
+                try:
+                    resp = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.0, max_tokens=10,
+                    )
+                    raw = resp.choices[0].message.content.strip().lower()
+                    if raw in LEVELS:
+                        predicted = raw
+                    break
+                except Exception:
+                    if attempt == 0: time.sleep(1)
 
-    # scoring: exact match = 1.0, adjacent level = 0.6, far = 0.2
-    LEVELS = ["nhan_biet", "thong_hieu", "van_dung", "van_dung_cao"]
     r_idx = LEVELS.index(requested) if requested in LEVELS else 0
     p_idx = LEVELS.index(predicted) if predicted in LEVELS else 0
     diff  = abs(r_idx - p_idx)
-    score_map = {0: 1.0, 1: 0.6, 2: 0.2, 3: 0.0}
-    score  = score_map.get(diff, 0.0)
-    passed = diff == 0
+    score = {0: 1.0, 1: 0.6, 2: 0.2, 3: 0.0}.get(diff, 0.0)
 
     return Check(
         score=round(score, 3),
-        passed=passed,
-        reason=f"requested={requested} predicted={predicted} diff={diff}",
+        passed=(diff == 0),
+        reason=f"src={source} requested={requested} predicted={predicted} diff={diff}",
     )
 
 
@@ -489,6 +504,7 @@ def verify_file(
     seen_embeddings: list = None,
     seen_dup_ids: list = None,
     position_counts: dict = None,
+    bloom_clf=None,
 ) -> list[MCQItem]:
     """Verify toàn bộ một file .jsonl, trả về list MCQItem đã điền verification."""
     if seen_embeddings  is None: seen_embeddings  = []
@@ -527,7 +543,8 @@ def verify_file(
             item, seen_embeddings, seen_dup_ids, embedder)
 
         # 7. Bloom Fidelity
-        checks["bloom_fidelity"] = check_bloom_fidelity(item, client)
+        checks["bloom_fidelity"] = check_bloom_fidelity(item, client,
+                                                          bloom_clf=bloom_clf)
 
         # 8. Answer Position Balance
         checks["answer_position_ok"] = check_answer_position(
@@ -564,17 +581,49 @@ def main():
     ap.add_argument("--outdir",   default="data/verified")
     ap.add_argument("--no_embed", action="store_true",
                     help="Bỏ qua sentence embedder (nhanh hơn, kém hơn)")
+    ap.add_argument("--bloom_model", default="models/bloom",
+                    help="Thư mục chứa bloom_classifier.pkl (từ VNHSGE)")
+    ap.add_argument("--bloom_backend", choices=["classifier","gpt","both"],
+                    default="gpt",
+                    help="gpt=GPT zero-shot (chinh xac hon, default) | classifier=VNHSGE offline | both=so sanh ca hai")
     args = ap.parse_args()
 
     # OpenAI client
     from openai import OpenAI
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
-        print("LỖI: thiếu OPENAI_API_KEY")
+        print("LOI: thieu OPENAI_API_KEY. Set bang:")
+        print("  set OPENAI_API_KEY=sk-...  (CMD)")
+        print("  $env:OPENAI_API_KEY='sk-...'  (PowerShell)")
         return
     client = OpenAI(api_key=api_key)
 
-    # Sentence embedder cho distractor cosine + duplicate check
+    # Bloom classifier từ VNHSGE
+    bloom_clf = None
+    bloom_path = Path(args.bloom_model) / "bloom_classifier.pkl"
+    if args.bloom_backend in ("classifier", "both"):
+        if bloom_path.exists():
+            try:
+                import joblib
+                bloom_clf = joblib.load(str(bloom_path))
+                print(f"Bloom classifier loaded (VNHSGE) -> {bloom_path}")
+            except Exception as e:
+                print(f"Khong load duoc bloom classifier ({e}). Fallback GPT.")
+        else:
+            print(f"Bloom classifier chua co ({bloom_path}).")
+            print("  Chay: python src/preprocess/train_bloom_classifier.py")
+            if args.bloom_backend == "classifier":
+                print("  Chuyen sang GPT fallback.")
+
+    if args.bloom_backend == "gpt":
+        bloom_clf = None   # ép dùng GPT
+        print("Bloom backend: GPT zero-shot (bloom_clf=None)")
+    elif args.bloom_backend == "classifier":
+        print(f"Bloom backend: VNHSGE classifier (offline)")
+    else:  # both
+        print("Bloom backend: BOTH — se chay ca hai va so sanh cuoi file")
+
+    # Sentence embedder
     embedder = None
     if not args.no_embed:
         try:
@@ -583,7 +632,7 @@ def main():
                 "bkai-foundation-models/vietnamese-bi-encoder")
             print("Embedder loaded.")
         except Exception as e:
-            print(f"Không load được embedder ({e}). Dùng Jaccard fallback.")
+            print(f"Khong load duoc embedder ({e}). Dung Jaccard fallback.")
 
     # KB
     kb_facts = load_kb_facts(args.entities)
@@ -610,6 +659,7 @@ def main():
             seen_embeddings=seen_embeddings,
             seen_dup_ids=seen_dup_ids,
             position_counts=position_counts,
+            bloom_clf=bloom_clf,
         )
 
         # Lưu file verified
@@ -662,6 +712,96 @@ def main():
         print('='*60)
         print(results_df.to_string(index=False))
         print(f"\n✅ Xong. File results_table.csv dùng làm input cho AHP/TOPSIS.")
+
+    # ── So sánh VNHSGE classifier vs GPT zero-shot (chỉ khi --bloom_backend both)
+    if args.bloom_backend == "both" and bloom_clf is not None:
+        print(f"\n{'='*60}")
+        print("SO SANH BLOOM FIDELITY: VNHSGE Classifier vs GPT Zero-shot")
+        print('='*60)
+
+        # Load lại tất cả item đã verify (dùng classifier)
+        import random
+        sample_items = []
+        for jsonl_path in args.inputs:
+            if not Path(jsonl_path).exists():
+                continue
+            out_path = Path(args.outdir) / f"verified_{Path(jsonl_path).stem}.jsonl"
+            if not out_path.exists():
+                continue
+            lines = out_path.read_text(encoding="utf-8").strip().splitlines()
+            # lấy tối đa 30 câu mỗi file để so sánh (tiết kiệm API)
+            sampled = random.sample(lines, min(30, len(lines)))
+            for line in sampled:
+                sample_items.append((Path(jsonl_path).stem, json.loads(line)))
+
+        print(f"\nSo sanh tren {len(sample_items)} cau (toi da 30/file)...")
+        print(f"{'Method':12s} {'Q':50s} {'CLF':12s} {'GPT':12s} {'Match'}")
+        print("-"*90)
+
+        agree, total = 0, 0
+        clf_correct, gpt_correct = 0, 0
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
+        from train_bloom_classifier import predict_bloom
+
+        for method, raw in sample_items:
+            item = MCQItem.model_validate(raw)
+            requested = item.request.bloom_requested.value
+
+            # Classifier prediction
+            clf_pred = predict_bloom(bloom_clf, item.question)
+
+            # GPT prediction
+            gpt_pred = "nhan_biet"
+            try:
+                prompt = (
+                    f"Classify Bloom's taxonomy: nhan_biet, thong_hieu, van_dung, "
+                    f"van_dung_cao\nQuestion: {item.question}\n"
+                    f"Output one word only."
+                )
+                resp = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role":"user","content":prompt}],
+                    temperature=0.0, max_tokens=10,
+                )
+                raw_gpt = resp.choices[0].message.content.strip().lower()
+                valid = ["nhan_biet","thong_hieu","van_dung","van_dung_cao"]
+                gpt_pred = raw_gpt if raw_gpt in valid else "nhan_biet"
+            except Exception:
+                pass
+
+            match = "✓" if clf_pred == gpt_pred else "✗"
+            clf_ok = "✅" if clf_pred == requested else "  "
+            gpt_ok = "✅" if gpt_pred == requested else "  "
+
+            if clf_pred == gpt_pred:
+                agree += 1
+            if clf_pred == requested:
+                clf_correct += 1
+            if gpt_pred == requested:
+                gpt_correct += 1
+            total += 1
+
+            q_short = item.question[:48] + ".." if len(item.question) > 50 else item.question
+            print(f"{method:12s} {q_short:50s} "
+                  f"{clf_pred:10s}{clf_ok} {gpt_pred:10s}{gpt_ok} {match}")
+
+        print(f"\n{'='*60}")
+        print(f"KET QUA SO SANH ({total} cau):")
+        print(f"  Agreement (CLF == GPT) : {agree}/{total} = {agree/total:.0%}")
+        print(f"  CLF matches requested  : {clf_correct}/{total} = {clf_correct/total:.0%}")
+        print(f"  GPT matches requested  : {gpt_correct}/{total} = {gpt_correct/total:.0%}")
+        print(f"\nNHAN XET:")
+        if clf_correct >= gpt_correct:
+            diff = clf_correct - gpt_correct
+            print(f"  VNHSGE Classifier BANG HOAC TOT HON GPT (+{diff} cau dung hon)")
+            print(f"  => Su dung classifier de tiet kiem chi phi API")
+        else:
+            diff = gpt_correct - clf_correct
+            print(f"  GPT tot hon Classifier ({diff} cau)")
+            print(f"  => Cân nhac tiep tuc dung GPT cho Bloom Fidelity")
+        print(f"\n  Chi phi GPT cho {total} cau nay: ~${total*0.00001:.4f}")
+        print(f"  Chi phi Classifier: $0.00 (offline)")
 
 
 if __name__ == "__main__":

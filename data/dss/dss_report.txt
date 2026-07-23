@@ -14,17 +14,17 @@ BÁO CÁO DSS — SO SÁNH PHƯƠNG PHÁP SINH MCQ
    CR = 0.0230 (dat nguong 0.1)
 
 2. XEP HANG TOPSIS
-   Hang 1: rag_llm      score=0.9222
-   Hang 2: vit5_ft      score=0.3544
-   Hang 3: rule_based   score=0.1744
+   Hang 1: rag_llm      score=0.8894
+   Hang 2: vit5_ft      score=0.5417
+   Hang 3: rule_based   score=0.1584
 
 3. KET LUAN DSS
    Phuong phap tot nhat (tong the): RAG_LLM
 
-   Diem manh theo phuong phap:
-   - rule_based  : manh nhat o 'Bloom Fidelity' (1.000)
-   - rag_llm     : manh nhat o 'Question Clarity' (1.000)
-   - vit5_ft     : manh nhat o 'Question Clarity' (0.992)
+   Diem manh TUONG DOI theo phuong phap (tieu chi phuong phap nay cao hon 2 phuong phap con lai):
+   - rule_based  : Distractor Type Match (0.920), Historical Correctness (0.977), Bloom Fidelity (0.926)
+   - rag_llm     : VQR (Valid Question Rate) (0.622), Evidence Match (0.951), Single Correct Answer (0.594), Question Clarity (1.000)
+   - vit5_ft     : Duplicate Check (0.733)
 
 4. PHAN TICH DO NHAY
    Tieu chi thay doi: vqr

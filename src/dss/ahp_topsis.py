@@ -320,14 +320,24 @@ def main():
         f"3. KET LUAN DSS",
         f"   Phuong phap tot nhat (tong the): {best.upper()}",
         "",
-        "   Diem manh theo phuong phap:",
+        "   Diem manh TUONG DOI theo phuong phap (tieu chi phuong phap nay cao hon 2 phuong phap con lai):",
     ]
-    # điểm mạnh từng phương pháp
+    # tìm tiêu chí mỗi phương pháp cao hơn 2 phương pháp kia
     for i, m in enumerate(methods):
-        best_crit = CRITERIA[dm[i].argmax()]
-        report_lines.append(
-            f"   - {m:12s}: manh nhat o '{CRITERIA_LABELS[best_crit]}' "
-            f"({dm[i].max():.3f})")
+        strong = []
+        for j, c in enumerate(CRITERIA):
+            my_val = dm[i, j]
+            others = [dm[k, j] for k in range(len(methods)) if k != i]
+            if my_val > max(others):
+                strong.append(f"{CRITERIA_LABELS[c]} ({my_val:.3f})")
+        if strong:
+            report_lines.append(f"   - {m:12s}: {', '.join(strong)}")
+        else:
+            # fallback: tiêu chí có điểm cao nhất tuyệt đối
+            best_c = CRITERIA[dm[i].argmax()]
+            report_lines.append(
+                f"   - {m:12s}: cao nhat o '{CRITERIA_LABELS[best_c]}' "
+                f"({dm[i].max():.3f}) — nhung khong vuot troi hon 2 pp kia")
     report_lines += [
         "",
         "4. PHAN TICH DO NHAY",
