@@ -1,0 +1,38 @@
+============================================================
+BÁO CÁO DSS — SO SÁNH PHƯƠNG PHÁP SINH MCQ
+============================================================
+
+1. TRỌNG SỐ TIÊU CHÍ (AHP)
+   VQR (Valid Question Rate)     : 0.2566 (25.7%)
+   Evidence Match                : 0.1776 (17.8%)
+   Single Correct Answer         : 0.1322 (13.2%)
+   Distractor Type Match         : 0.1027 (10.3%)
+   Historical Correctness        : 0.1262 (12.6%)
+   Question Clarity              : 0.0855 (8.6%)
+   Bloom Fidelity                : 0.0742 (7.4%)
+   Duplicate Check               : 0.0451 (4.5%)
+   CR = 0.0230 (dat nguong 0.1)
+
+2. XEP HANG TOPSIS
+   Hang 1: rag_llm      score=0.9222
+   Hang 2: vit5_ft      score=0.3544
+   Hang 3: rule_based   score=0.1744
+
+3. KET LUAN DSS
+   Phuong phap tot nhat (tong the): RAG_LLM
+
+   Diem manh theo phuong phap:
+   - rule_based  : manh nhat o 'Bloom Fidelity' (1.000)
+   - rag_llm     : manh nhat o 'Question Clarity' (1.000)
+   - vit5_ft     : manh nhat o 'Question Clarity' (0.992)
+
+4. PHAN TICH DO NHAY
+   Tieu chi thay doi: vqr
+   Thu hang on dinh (khong co diem giao)
+
+5. DE XUAT
+   - Su dung RAG+LLM khi chat luong la uu tien (VQR cao nhat)
+   - Su dung Rule-based khi can kiem soat lich su + offline + $0
+   - ViT5 phu hop sinh cau hoi (QG) nhung nen ket hop voi
+     RAG distractor de nang chat luong phuong an nhieu
+   - Chien luoc lai (hybrid routing) toi uu cho moi loai cau hoi

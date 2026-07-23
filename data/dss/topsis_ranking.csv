@@ -1,0 +1,4 @@
+﻿method,topsis_score,d_pis,d_nis,rank
+rag_llm,0.9222,0.0137,0.1621,1
+vit5_ft,0.3544,0.1322,0.0726,2
+rule_based,0.1744,0.1612,0.0341,3

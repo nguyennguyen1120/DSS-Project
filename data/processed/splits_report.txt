@@ -1,0 +1,25 @@
+=== BUILD CORPUS LỊCH SỬ (ViQuAD 2.0) ===
+  rows_seen           : 39,569
+  rows_kept           : 13,997
+  passages            : 1,862
+  answerable          : 10,114
+  unanswerable        : 3,883
+  skipped_not_history : 25,572
+
+=== CHIA SPLIT CÂN TẢI (theo title) ===
+  train: 23 bài | 1491 đoạn (80.1%) | VN=427 / TG=1064
+  dev  :  8 bài |  179 đoạn ( 9.6%) | VN=52 / TG=127
+  test :  7 bài |  192 đoạn (10.3%) | VN=57 / TG=135
+  (chi tiết câu hỏi mỗi split:)
+    train: 11103 câu hỏi (3047 không trả lời được)
+    dev  :  1536 câu hỏi (437 không trả lời được)
+    test :  1358 câu hỏi (399 không trả lời được)
+  Kiểm tra rò rỉ: đoạn=1 split, bài=1 split (phải =1) ✅
+
+=== NHÃN VÀNG CHO VERIFIER ===
+  answerable có span hợp lệ : 8,126
+  unanswerable (is_impossible): 3,883
+
+=== TIỂU MIỀN (trục phân tích độ bền) ===
+  đoạn VN     : 536
+  đoạn thế giới: 1,326

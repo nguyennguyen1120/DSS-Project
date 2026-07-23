@@ -1,0 +1,9 @@
+﻿criterion,label,weight,lambda_max,CR
+vqr,VQR (Valid Question Rate),0.2566,8.227,0.023
+evidence_match,Evidence Match,0.1776,8.227,0.023
+single_correct,Single Correct Answer,0.1322,8.227,0.023
+distractor_type_match,Distractor Type Match,0.1027,8.227,0.023
+historical_correctness,Historical Correctness,0.1262,8.227,0.023
+question_clarity,Question Clarity,0.0855,8.227,0.023
+bloom_fidelity,Bloom Fidelity,0.0742,8.227,0.023
+duplicate_check,Duplicate Check,0.0451,8.227,0.023

@@ -1,0 +1,4 @@
+﻿method,n_items,vqr,avg_score,evidence_match,single_correct,distractor_type_match,historical_correctness,question_clarity,duplicate_check,bloom_fidelity,answer_position_ok
+rule_based,423,0.2718676122931442,0.5822567375886523,0.349,0.271,0.689,0.977,0.988,0.036,1.0,0.793
+rag_llm,90,0.6222222222222222,0.7767377777777782,0.951,0.594,0.642,0.838,1.0,0.457,0.933,0.834
+vit5_ft,297,0.27946127946127947,0.6577033670033666,0.811,0.367,0.463,0.708,0.992,0.513,0.754,0.896
